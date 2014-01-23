@@ -8,8 +8,13 @@
             |__   |   __|  |  |  |  |  | . | .'|  _| '_| | | . |
             |_____|__|  |_____|_____|  |___|__,|___|_,_|___|  _|
                                                            |_|
+                                    by Abhishek Mishra      <ideamonk@gmail.com >
+                                       Shashwat Anand  <anand.shashwat@gmail.com> 
 
 Keywords: python, tools, algorithms, spoj
+
+Copyright (C) 2003-2004 Free Software Foundation, Inc.
+
 
 Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
@@ -44,6 +49,8 @@ import glob
 import getpass
 import optparse
 
+dupdown = 0
+subidinc = 0
 
 try:
     from mechanize import Browser
@@ -74,24 +81,35 @@ def getSolutions (path_prefix, path_proxy):
 
     # authenticate the user
     print "Authenticating " + username
-    br.open ("http://spoj.pl")
+    br.open ("http://www.spoj.com")
     br.select_form (name="login")
     br["login_user"] = username
     br["password"] = password
 
     # sign in for a day to avoid timeouts
     br.find_control(name="autologin").items[0].selected = True
-    br.form.action = "http://www.spoj.pl"
+    br.form.action = "http://www.spoj.com/"
     response = br.submit()
 
     verify = response.read()
     if (verify.find("Authentication failed!") != -1):
         print "Error authenticating - " + username
         exit(0)
+    else:
+	print "Successfully Authenticated !!"
+
+    # Whether or not to download the multiple accepted solution of same problem
+    global dupdown
+    global subidinc
+    print "Do You want to download multiple ACed Solution of same problem? (The latest one will be downloaded otherwise) [Y/N] :",
+    dupdown = raw_input()
+    if dupdown!='Y' and dupdown!='y':
+	print "Do You Submission ID as a part of file-name? [Y/N] :",
+	subidinc=raw_input()
 
     # grab the signed submissions list
     print "Grabbing siglist for " + username
-    siglist = br.open("http://www.spoj.pl/status/" + username + "/signedlist")
+    siglist = br.open("http://www.spoj.com/status/" + username + "/signedlist")
 
     # dump first nine useless lines in signed list for formatting
     for i in xrange(9):
@@ -101,9 +119,9 @@ def getSolutions (path_prefix, path_proxy):
     print "Filtering siglist for AC/Challenge solutions..."
     mysublist = list()
 
-    while True:
+    while True: 
         temp = siglist.readline()
-
+        
         if temp=='\------------------------------------------------------------------------------/\n':
             # reached end of siglist
             break
@@ -112,39 +130,52 @@ def getSolutions (path_prefix, path_proxy):
             print "Reached EOF, siglist format has probably changed," + \
                     " contact author."
             exit(1)
-
+            
         entry = [x.strip() for x in temp.split('|')]
-
+        
         if entry[4] == 'AC' or entry[4].isdigit():
-            mysublist.append (entry)
+        	dupflag=0
+		
+		if dupdown!='Y' and dupdown!='y':
+        		for xdup in mysublist:
+        			if xdup[3]==entry[3]:
+        				dupflag=1
+        				break
+
+        	if dupflag==0:
+            		mysublist.append (entry)
 
     print "Done !!!"
     return mysublist
 
 def downloadSolutions(mysublist):
+    
     totalsubmissions = len(mysublist)
     
     print "Fetching sources into " + path_prefix
     progress = 0
     
     for entry in mysublist:
-        existing_files = glob.glob(os.path.join(path_prefix, "%s-%s*" % \
-                                                           (entry[3],entry[1])))
-
+        existing_files = glob.glob(os.path.join(path_prefix, "%s*" % \
+                                                           (entry[3])))
         progress += 1
         if len(existing_files) == 1:
             print "%d/%d - %s skipped." % (progress, totalsubmissions, entry[3])
         else:
-            source_code = br.open("http://www.spoj.pl/files/src/save/" + \
-                                                                       entry[1])
+            source_code = br.open("http://www.spoj.com/files/src/save/" + entry[1])
+
             header = dict(source_code.info())
             filename = ""
             try:
-                filename = header['content-disposition'].split('=')[1]
-                filename = entry[3] + "-" + filename
-            except:
-                filename = entry[3] + "-" + entry[1]
-                
+                filehead = header['content-disposition'].split('=')[1]
+		fdummy,fileext = os.path.splitext(filehead)
+                filename = entry[3] + fileext
+	    except:
+                filename = entry[3]
+
+	    if not os.path.exists(path_prefix):
+		    os.makedirs(path_prefix)    
+
             fp = open( os.path.join(path_prefix, filename), "w")
             fp.write (source_code.read())
             fp.close
